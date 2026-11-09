@@ -1,0 +1,656 @@
+<!doctype html>
+<html lang="tr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>WiFi Konum</title>
+<style>
+:root{
+  --bg:#f3f4f7; --panel:#ffffff; --line:#e1e4ea; --text:#161a22; --muted:#667085;
+  --accent:#2563eb; --accent-soft:rgba(37,99,235,.12); --danger:#d92d4b;
+  --warn-bg:#fff4d6; --warn-text:#7a5200;
+  --room:#ffffff; --wall:#2b3240; --grid:rgba(22,26,34,.07); --point:#161a22; --ring:#ffffff;
+}
+@media (prefers-color-scheme: dark){
+  :root{
+    --bg:#0e1014; --panel:#171a21; --line:#272c37; --text:#e8eaf0; --muted:#8d95a6;
+    --accent:#5b9dff; --accent-soft:rgba(91,157,255,.16); --danger:#ff6b81;
+    --warn-bg:#3a2e0c; --warn-text:#ffd98a;
+    --room:#1b1f28; --wall:#c5ccd9; --grid:rgba(255,255,255,.06); --point:#ffffff; --ring:#0e1014;
+  }
+}
+*{box-sizing:border-box}
+[hidden]{display:none!important}
+html,body{height:100%}
+body{margin:0;background:var(--bg);color:var(--text);font:14px/1.45 -apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif}
+.app{display:grid;grid-template-columns:minmax(0,1fr) 360px;height:100vh}
+.stage{display:flex;flex-direction:column;min-width:0;min-height:0;padding:16px;gap:12px}
+.head{display:flex;align-items:flex-start;justify-content:space-between;gap:12px}
+.head h1{margin:0;font-size:26px;line-height:1.2;letter-spacing:-.01em}
+.head p{margin:4px 0 0;color:var(--muted)}
+.pill{flex:none;padding:6px 12px;border-radius:999px;background:var(--panel);border:1px solid var(--line);color:var(--muted);font-size:13px;white-space:nowrap;font-variant-numeric:tabular-nums}
+.pill.busy{color:var(--accent);border-color:var(--accent)}
+.warn{padding:8px 12px;border-radius:8px;background:var(--warn-bg);color:var(--warn-text);font-size:13px}
+.canvas-wrap{position:relative;flex:1;min-height:300px;background:var(--panel);border:1px solid var(--line);border-radius:12px;overflow:hidden}
+canvas{position:absolute;inset:0;width:100%;height:100%;touch-action:none}
+canvas.click{cursor:crosshair} canvas.move{cursor:move}
+.overlay{position:absolute;display:flex;align-items:center;gap:8px;padding:6px 10px;border-radius:8px;background:var(--panel);border:1px solid var(--line);font-size:12px;color:var(--muted)}
+.overlay.layer{top:10px;right:10px}
+.overlay.legend{left:10px;bottom:10px;font-variant-numeric:tabular-nums}
+.legend .ramp{width:110px;height:8px;border-radius:4px;background:linear-gradient(90deg,#2b1a5e,#3a52b4,#2096aa,#50c878,#fae150)}
+select,input,button{font:inherit;color:inherit}
+select{max-width:220px;background:var(--panel);border:1px solid var(--line);border-radius:6px;padding:3px 6px}
+aside{display:flex;flex-direction:column;min-height:0;background:var(--panel);border-left:1px solid var(--line)}
+.tabs{display:flex;padding:12px 12px 0;gap:4px;border-bottom:1px solid var(--line)}
+.tab{flex:1;padding:8px 0 10px;border:0;background:none;color:var(--muted);font-weight:600;border-bottom:2px solid transparent;cursor:pointer}
+.tab.on{color:var(--text);border-bottom-color:var(--accent)}
+.scroll{flex:1;overflow:auto;padding:16px;display:flex;flex-direction:column;gap:20px}
+.panel{display:flex;flex-direction:column;gap:12px}
+h2{margin:0;font-size:12px;text-transform:uppercase;letter-spacing:.06em;color:var(--muted)}
+ol{margin:0;padding-left:18px;display:flex;flex-direction:column;gap:6px}
+.muted{color:var(--muted);font-size:13px}
+.btn{padding:7px 12px;border-radius:8px;border:1px solid var(--line);background:var(--panel);cursor:pointer}
+.btn:hover{border-color:var(--muted)}
+.btn.primary{background:var(--accent);border-color:var(--accent);color:#fff;font-weight:600}
+.btn.danger{color:var(--danger)}
+.btn:disabled{opacity:.45;cursor:default}
+.row{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+.seg{display:inline-flex;border:1px solid var(--line);border-radius:8px;overflow:hidden}
+.seg button{border:0;background:none;padding:6px 14px;cursor:pointer}
+.seg button.on{background:var(--accent-soft);color:var(--accent);font-weight:600}
+.card{padding:10px 12px;border:1px solid var(--line);border-radius:10px;display:flex;flex-direction:column;gap:8px}
+.rects{display:flex;flex-direction:column;gap:6px}
+.rect-row,.rect-head{display:grid;grid-template-columns:minmax(0,1fr) 52px 52px 52px 52px 18px;gap:4px;align-items:center}
+.rect-head{font-size:11px;color:var(--muted)}
+.rect-row input{width:100%;min-width:0;padding:5px 5px;border:1px solid var(--line);border-radius:6px;background:var(--bg)}
+.rect-row input[type=number]{-moz-appearance:textfield;appearance:textfield}
+.rect-row input::-webkit-outer-spin-button,.rect-row input::-webkit-inner-spin-button{-webkit-appearance:none;margin:0}
+.rect-row button{border:0;background:none;color:var(--muted);cursor:pointer;font-size:16px;padding:0}
+.event{display:flex;justify-content:space-between;gap:8px;font-size:13px;font-variant-numeric:tabular-nums}
+.event span:last-child{color:var(--muted)}
+.zone{display:grid;grid-template-columns:minmax(0,1fr) 70px 58px;gap:8px;align-items:center;font-size:13px}
+.net{display:grid;grid-template-columns:minmax(0,1fr) auto 48px 56px;gap:8px;align-items:center;font-size:13px}
+.zone span:first-child,.net span:first-child{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.net .ch{color:var(--muted);font-size:12px;white-space:nowrap}
+.bar{height:6px;border-radius:3px;background:var(--line);overflow:hidden}
+.bar i{display:block;height:100%;background:var(--accent);border-radius:3px}
+.val{text-align:right;color:var(--muted);font-variant-numeric:tabular-nums}
+.list{display:flex;flex-direction:column;gap:6px}
+#toast{position:fixed;left:50%;bottom:24px;transform:translateX(-50%);padding:10px 16px;border-radius:10px;background:var(--text);color:var(--bg);font-size:13px;opacity:0;pointer-events:none;transition:opacity .2s}
+#toast.show{opacity:1}
+@media (max-width:860px){
+  .app{grid-template-columns:1fr;height:auto}
+  .canvas-wrap{flex:none;height:58vh}
+  aside{border-left:0;border-top:1px solid var(--line)}
+  .head h1{font-size:22px}
+}
+</style>
+</head>
+<body>
+<div class="app">
+  <section class="stage">
+    <div class="head">
+      <div><h1 id="headline">Bağlanıyor…</h1><p id="subline"></p></div>
+      <div class="pill" id="scanpill" title="macOS tam WiFi taramasına yaklaşık 13 saniyede bir izin veriyor.">Tarama bekleniyor</div>
+    </div>
+    <div class="warn" id="warn" hidden></div>
+    <div class="canvas-wrap">
+      <canvas id="cv"></canvas>
+      <div class="overlay layer"><label for="layer">Katman</label><select id="layer"></select></div>
+      <div class="overlay legend" id="legend" hidden><span id="lmin"></span><span class="ramp"></span><span id="lmax"></span></div>
+    </div>
+  </section>
+
+  <aside>
+    <div class="tabs">
+      <button class="tab" data-tab="plan">Plan</button>
+      <button class="tab" data-tab="olcum">Ölçüm</button>
+      <button class="tab" data-tab="canli">Canlı</button>
+      <button class="tab" data-tab="hareket">Hareket</button>
+    </div>
+    <div class="scroll">
+      <div class="panel" data-panel="plan" hidden>
+        <h2>Oda planı (metre)</h2>
+        <div class="rects">
+          <div class="rect-head"><span>Ad</span><span>x</span><span>y</span><span>Gen.</span><span>Uzun.</span><span></span></div>
+          <div class="rects" id="rects"></div>
+        </div>
+        <div class="row"><button class="btn" id="addrect">+ Alan ekle</button><span class="muted" id="area"></span></div>
+        <div class="row"><button class="btn primary" id="saveplan">Planı kaydet</button><span class="muted" id="dirty" hidden>Kaydedilmemiş değişiklik var</span></div>
+        <p class="muted">x ve y, alanın sol üst köşesidir. Alanları harita üzerinde sürükleyerek de taşıyabilirsin. Duvarla ayrılan her yer (tuvalet gibi) ayrı bir alan olmalı.</p>
+      </div>
+
+      <div class="panel" data-panel="olcum" hidden>
+        <h2>Odayı ölç</h2>
+        <ol>
+          <li>MacBook'u normal kullandığın gibi tut ve bir noktada dur.</li>
+          <li>Haritada durduğun yere tıkla, ölçüm bitene kadar kıpırdama.</li>
+          <li>Yaklaşık 1 metre aralıklarla tüm odayı ve tuvaleti dolaş.</li>
+        </ol>
+        <div class="row"><span>Nokta başına tarama</span>
+          <span class="seg" id="seg"><button data-n="1">1</button><button data-n="2">2</button><button data-n="3">3</button></span>
+        </div>
+        <p class="muted" id="pertime"></p>
+        <div class="card" id="selcard" hidden>
+          <span id="selinfo"></span>
+          <div class="row"><button class="btn" id="remeasure">Buradan tekrar ölç</button><button class="btn danger" id="delpoint">Noktayı sil</button></div>
+        </div>
+        <div class="row"><button class="btn" id="cancel" hidden>Ölçümü iptal et</button></div>
+        <div class="row"><span class="muted" id="ptcount"></span></div>
+        <div class="row"><button class="btn danger" id="clear">Tüm ölçümleri sil</button></div>
+      </div>
+
+      <div class="panel" data-panel="canli" hidden>
+        <h2>Neredeyim</h2>
+        <div class="list" id="zones"></div>
+        <p class="muted" id="livehint"></p>
+      </div>
+
+      <div class="panel" data-panel="hareket" hidden>
+        <h2>Hareket algılama</h2>
+        <ol>
+          <li>MacBook'u bir yere koy ve yerinden oynatma.</li>
+          <li>Kıpırdamadan dur (ya da odadan çık) ve aşağıdaki düğmeye bas.</li>
+          <li>Sonra odada dolaş: sinyal dalgalanınca hareket olarak işaretlenir.</li>
+        </ol>
+        <div class="row"><button class="btn primary" id="learn">Sakin durumu öğren (15 sn)</button></div>
+        <div class="row"><span>Hassasiyet</span>
+          <span class="seg" id="sens"><button data-s="1">Düşük</button><button data-s="2">Orta</button><button data-s="3">Yüksek</button></span>
+        </div>
+        <p class="muted" id="mstats"></p>
+        <h2>Son hareketler</h2>
+        <div class="list" id="events"></div>
+        <p class="muted">En iyi, modem ile MacBook arasındaki bölgedeki hareketi yakalar. Bu sekme açıkken tam tarama duraklar, konum güncellenmez.</p>
+      </div>
+
+      <div class="panel">
+        <h2>Görünen ağlar</h2>
+        <div class="list" id="nets"></div>
+        <p class="muted" id="netage"></p>
+      </div>
+    </div>
+  </aside>
+</div>
+<div id="toast"></div>
+
+<script>
+const $ = id => document.getElementById(id);
+const cv = $('cv'), ctx = cv.getContext('2d');
+let S = null, offline = false, tab = null, draft = null, dirty = false;
+let layer = 'post', layerAuto = true, layerKeys = null, heat = null;
+let sel = null, nScans = 2, V = null, drag = null, dot = null, M = null;
+const css = {};
+
+function readCss(){
+  const g = getComputedStyle(document.documentElement);
+  for (const k of ['room','wall','grid','point','ring','accent','muted','text']) css[k] = g.getPropertyValue('--' + k).trim();
+}
+readCss();
+matchMedia('(prefers-color-scheme: dark)').addEventListener('change', readCss);
+
+const num = (v, d = 1) => v.toLocaleString('tr-TR', {minimumFractionDigits: d, maximumFractionDigits: d});
+function el(tag, cls, text){ const e = document.createElement(tag); if (cls) e.className = cls; if (text !== undefined) e.textContent = text; return e; }
+let toastTimer = null;
+function toast(msg){ const t = $('toast'); t.textContent = msg; t.classList.add('show'); clearTimeout(toastTimer); toastTimer = setTimeout(() => t.classList.remove('show'), 2600); }
+
+async function api(path, body){
+  const r = await fetch(path, body === undefined ? {} : {method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify(body)});
+  const j = await r.json();
+  if (!r.ok) throw new Error(j.error || 'Bir hata oluştu.');
+  return j;
+}
+async function post(path, body = {}){
+  try { await api(path, body); await refresh(); return true; }
+  catch (e) { toast(e.message); return false; }
+}
+
+// ---- sunucu durumu ---------------------------------------------------------
+async function refresh(){
+  try { S = await api('/api/state'); offline = false; }
+  catch (e) { offline = true; }
+  if (!S) { $('headline').textContent = 'Sunucuya ulaşılamıyor'; return; }
+  if (tab === null) setTab(S.ready ? 'canli' : 'olcum');
+  syncLayers();
+  await syncHeat();
+  renderSide();
+}
+async function loop(){ await refresh(); setTimeout(loop, 700); }
+
+function syncLayers(){
+  const sig = S.keys.join('\n');
+  if (sig !== layerKeys){
+    layerKeys = sig;
+    const s = $('layer');
+    s.textContent = '';
+    const add = (v, t) => { const o = el('option', null, t); o.value = v; s.append(o); };
+    add('post', 'Konum olasılığı');
+    for (const k of S.keys) add('k:' + k, 'Sinyal: ' + k);
+    add('none', 'Katman yok');
+    if (layer.startsWith('k:') && !S.keys.includes(layer.slice(2))) layer = 'post';
+    autoLayer();
+    s.value = layer;
+  }
+}
+function autoLayer(){
+  if (!layerAuto || !S) return;
+  layer = (tab === 'olcum' && S.keys.length) ? 'k:' + S.keys[0] : 'post';
+  $('layer').value = layer;
+}
+async function syncHeat(){
+  if (!layer.startsWith('k:')) { heat = null; return; }
+  const key = layer.slice(2);
+  if (heat && heat.key === key && heat.rev === S.rev) return;
+  try {
+    const h = await api('/api/heat?key=' + encodeURIComponent(key));
+    heat = h.vals ? Object.assign(h, {rev: S.rev}) : null;
+  } catch (e) { heat = null; }
+}
+
+// ---- yan panel -------------------------------------------------------------
+const WARN = {
+  wifi_off: 'WiFi kapalı görünüyor. Açınca ölçümler kendiliğinden başlar.',
+  no_names: 'Ağ adları okunamıyor. Aynı kanaldaki ağlar ayırt edilemediği için doğruluk düşer.',
+  scan_failed: 'Tarama başarısız oldu, yeniden deneniyor.',
+  scanner_stopped: 'WiFi tarayıcı durdu, yeniden başlatılıyor.',
+  no_swift: 'swift komutu bulunamadı. Xcode komut satırı araçlarının kurulu olması gerekiyor.',
+};
+
+function scanText(){
+  if (S.next_scan === null) return 'İlk tarama bekleniyor';
+  return S.next_scan > 0.4 ? 'Sonraki tarama ' + Math.ceil(S.next_scan) + ' sn' : 'Taranıyor…';
+}
+
+function renderSide(){
+  if (!S) return;
+  const c = S.collecting, est = S.est;
+  const h = $('headline'), sub = $('subline');
+  if (tab === 'hareket') renderMotion();
+  else if (offline) { h.textContent = 'Sunucuya ulaşılamıyor'; sub.textContent = 'server.py çalışıyor mu?'; }
+  else if (c) { h.textContent = c.left ? 'Kıpırdama, ölçülüyor ' + (c.total - c.left) + '/' + c.total : 'Kıpırdama, bitiyor…'; sub.textContent = 'Tarama tamamlanana kadar aynı yerde dur.'; }
+  else if (est) {
+    const z = est.zones[est.zone];
+    h.textContent = z.name + ' · %' + Math.round(z.p * 100);
+    sub.textContent = 'Konum belirsizliği ±' + num(est.spread) + ' m';
+  }
+  else if (!S.points.length) { h.textContent = 'Önce odayı ölç'; sub.textContent = 'Ölçüm sekmesinde, durduğun yere haritada tıkla.'; }
+  else if (!S.ready) { h.textContent = 'Biraz daha ölçüm gerekli'; sub.textContent = 'Konum tahmini için en az 2 nokta gerekiyor; 8–10 nokta iyi sonuç verir.'; }
+  else { h.textContent = 'Konum hesaplanıyor…'; sub.textContent = 'İlk ölçüm bekleniyor.'; }
+
+  const pill = $('scanpill');
+  pill.textContent = S.scan_paused ? 'Tarama duraklatıldı' : scanText();
+  pill.classList.toggle('busy', !S.scan_paused && S.next_scan !== null && S.next_scan <= 0.4);
+
+  const w = $('warn');
+  w.hidden = !S.warn;
+  if (S.warn) w.textContent = WARN[S.warn] || S.warn;
+
+  // Ölçüm sekmesi
+  for (const b of $('seg').children) b.classList.toggle('on', +b.dataset.n === nScans);
+  $('pertime').textContent = 'Nokta başına yaklaşık ' + Math.round(S.period / 2 + 3.5 + (nScans - 1) * S.period) + ' sn. Geri sayım bitmek üzereyken tıklarsan daha az beklersin.';
+  const sp = S.points.find(p => p.id === sel);
+  $('selcard').hidden = !sp || !!c;
+  if (sp) $('selinfo').textContent = 'Seçili nokta: ' + sp.n + ' tarama (' + num(sp.x) + ' m, ' + num(sp.y) + ' m)';
+  $('cancel').hidden = !c;
+  const total = S.points.reduce((a, p) => a + p.n, 0);
+  $('ptcount').textContent = S.points.length ? S.points.length + ' nokta · ' + total + ' tarama' : 'Henüz ölçüm yok.';
+  $('clear').disabled = !S.points.length;
+
+  // Canlı sekmesi
+  const zones = $('zones');
+  zones.textContent = '';
+  if (est) for (const z of est.zones) {
+    const row = el('div', 'zone');
+    const bar = el('span', 'bar'), fill = el('i');
+    fill.style.width = Math.round(z.p * 100) + '%';
+    bar.append(fill);
+    row.append(el('span', null, z.name), bar, el('span', 'val', '%' + Math.round(z.p * 100)));
+    zones.append(row);
+  }
+  $('livehint').textContent = est
+    ? 'Konum, yaklaşık ' + Math.round(S.period) + ' saniyede bir gelen tam taramayla ve bağlı ağın saniyede iki kez okunan sinyaliyle güncellenir. Yer değiştirince noktanın oturması yarım dakika sürebilir.'
+    : 'Konum tahmini için önce Ölçüm sekmesinde odayı dolaş.';
+
+  // Ağ listesi
+  const nets = $('nets');
+  nets.textContent = '';
+  const rows = S.nets.slice(0, 12);
+  if (S.cur) rows.unshift([S.cur.key, S.cur.rssi]);
+  for (const [k, v] of rows) {
+    const row = el('div', 'net');
+    const bar = el('span', 'bar'), fill = el('i');
+    fill.style.width = Math.min(100, Math.max(3, (v + 95) / 60 * 100)) + '%';
+    bar.append(fill);
+    const cut = k.indexOf(' · kanal ');
+    const name = el('span', null, cut < 0 ? k : k.slice(0, cut));
+    name.title = k;
+    row.append(name, el('span', 'ch', cut < 0 ? '' : 'k. ' + k.slice(cut + 9)), bar, el('span', 'val', Math.round(v) + ' dBm'));
+    nets.append(row);
+  }
+  $('netage').textContent = S.scan_age === null ? 'İlk tarama bekleniyor…' : 'Son tam tarama ' + Math.round(S.scan_age) + ' sn önce · ' + S.nets.length + ' ağ';
+
+  const lg = $('legend');
+  lg.hidden = !(heat && tab !== 'plan' && tab !== 'hareket');
+  if (heat) { $('lmin').textContent = Math.round(heatLo()) + ' dBm'; $('lmax').textContent = Math.round(heat.max) + ' dBm'; }
+  cv.className = tab === 'olcum' ? 'click' : tab === 'plan' ? 'move' : '';
+}
+
+function setTab(t){
+  const was = tab;
+  tab = t;
+  if (t === 'hareket' && was !== 'hareket') post('/api/motion', {on: true});
+  if (was === 'hareket' && t !== 'hareket') post('/api/motion', {on: false});
+  document.querySelector('.overlay.layer').hidden = t === 'hareket';
+  for (const b of document.querySelectorAll('.tab')) b.classList.toggle('on', b.dataset.tab === t);
+  for (const p of document.querySelectorAll('[data-panel]')) p.hidden = p.dataset.panel !== t;
+  sel = null;
+  // Kaydedilmemiş plan taslağı sekme değişse de durur; sayfa yenilenince atılır.
+  if (t === 'plan') { if (!draft) { draft = JSON.parse(JSON.stringify(S.rects)); dirty = false; } buildPlan(); }
+  autoLayer();
+  syncHeat().then(renderSide);
+  renderSide();
+}
+
+// ---- hareket algılama ------------------------------------------------------
+async function motionLoop(){
+  if (tab === 'hareket') {
+    try {
+      M = await api('/api/motion');
+      // Sunucu, sekme bir süre sorgulamazsa modu kapatır (örn. bilgisayar uyuyunca); geri aç.
+      if (!M.on && tab === 'hareket') await api('/api/motion', {on: true});
+    } catch (e) {}
+    renderMotion();
+  }
+  setTimeout(motionLoop, tab === 'hareket' ? 300 : 800);
+}
+
+function renderMotion(){
+  const h = $('headline'), sub = $('subline');
+  if (!M) { h.textContent = 'Sinyal bekleniyor…'; sub.textContent = ''; return; }
+  const detail = M.sd === null ? '' : 'Dalgalanma ' + num(M.sd) + ' dB · eşik ' + num(M.thr) + ' dB';
+  if (M.learning !== null) { h.textContent = 'Sakin durum öğreniliyor… ' + Math.ceil(M.learning) + ' sn'; sub.textContent = 'Bitene kadar kıpırdama.'; }
+  else if (M.rest === null) { h.textContent = 'Önce sakin durumu öğret'; sub.textContent = 'MacBook\'u sabit bırak, kıpırdamadan dur ve düğmeye bas.'; }
+  else if (M.active) { h.textContent = 'Hareket var'; sub.textContent = detail; }
+  else { h.textContent = 'Sakin'; sub.textContent = detail; }
+  $('learn').disabled = M.learning !== null;
+  for (const b of $('sens').children) b.classList.toggle('on', +b.dataset.s === M.sens);
+  $('mstats').textContent = M.rest === null
+    ? 'Sakin durum henüz öğrenilmedi; eşik şimdilik tahmini.'
+    : 'Sakin durumda dalgalanma ' + num(M.rest, 2) + ' dB. MacBook\'un yerini değiştirirsen yeniden öğret.';
+  const box = $('events');
+  box.textContent = '';
+  if (!M.events.length) box.append(el('span', 'muted', 'Henüz hareket algılanmadı.'));
+  for (const e of M.events) {
+    const row = el('div', 'event');
+    const ago = e.ago < 60 ? e.ago + ' sn önce' : Math.round(e.ago / 60) + ' dk önce';
+    row.append(el('span', null, ago), el('span', null, num(Math.max(e.dur, 0.5)) + ' sn · en çok ' + num(e.peak) + ' dB'));
+    box.append(row);
+  }
+}
+
+function drawMotion(W, H){
+  ctx.font = '12px -apple-system, BlinkMacSystemFont, sans-serif';
+  ctx.textBaseline = 'middle';
+  if (!M || !M.series.length) { ctx.fillStyle = css.muted; ctx.textAlign = 'center'; ctx.fillText('Sinyal bekleniyor…', W / 2, H / 2); ctx.textAlign = 'left'; return; }
+  const L = 52, R = 14, T = 30, B = 26, gap = 34, span = 60;
+  const h1 = (H - T - B - gap) * 0.62, h2 = (H - T - B - gap) * 0.38, top2 = T + h1 + gap;
+  const X = age => L + (1 - Math.min(age, span) / span) * (W - L - R);
+
+  // hareket algılanan aralıklar
+  ctx.fillStyle = 'rgba(245,158,11,0.2)';
+  for (let i = 0; i < M.sds.length; i++) {
+    if (!M.sds[i][2]) continue;
+    const x0 = i ? X(M.sds[i - 1][0]) : X(M.sds[i][0]) - 4;
+    while (i + 1 < M.sds.length && M.sds[i + 1][2]) i++;  // art arda gelenleri tek bant olarak çiz
+    const x1 = X(M.sds[i][0]);
+    ctx.fillRect(x0, T, x1 - x0, h1);
+    ctx.fillRect(x0, top2, x1 - x0, h2);
+  }
+
+  // çerçeveler
+  ctx.strokeStyle = css.grid; ctx.lineWidth = 1;
+  ctx.strokeRect(L, T, W - L - R, h1); ctx.strokeRect(L, top2, W - L - R, h2);
+
+  // sinyal eğrisi
+  let lo = Infinity, hi = -Infinity;
+  for (const [, v] of M.series) { lo = Math.min(lo, v); hi = Math.max(hi, v); }
+  if (hi - lo < 10) { const mid = (hi + lo) / 2; lo = Math.floor(mid - 5); hi = Math.ceil(mid + 5); }
+  const Y1 = v => T + (1 - (v - lo) / (hi - lo)) * h1;
+  ctx.beginPath();
+  M.series.forEach(([age, v], i) => { const x = X(age), y = Y1(v); i ? ctx.lineTo(x, y) : ctx.moveTo(x, y); });
+  ctx.strokeStyle = css.accent; ctx.lineWidth = 1.5; ctx.lineJoin = 'round'; ctx.stroke();
+
+  // dalgalanma eğrisi ve eşik
+  let top = M.thr * 2;
+  for (const [, sd] of M.sds) top = Math.max(top, sd * 1.1);
+  const Y2 = v => top2 + (1 - Math.min(v, top) / top) * h2;
+  ctx.beginPath();
+  M.sds.forEach(([age, sd], i) => { const x = X(age), y = Y2(sd); i ? ctx.lineTo(x, y) : ctx.moveTo(x, y); });
+  ctx.strokeStyle = css.text; ctx.lineWidth = 1.5; ctx.stroke();
+  ctx.setLineDash([5, 4]); ctx.beginPath(); ctx.moveTo(L, Y2(M.thr)); ctx.lineTo(W - R, Y2(M.thr));
+  ctx.strokeStyle = 'rgb(245,158,11)'; ctx.stroke(); ctx.setLineDash([]);
+
+  // yazılar
+  ctx.fillStyle = css.muted;
+  ctx.fillText('Sinyal gücü (dBm)', L, T - 12);
+  ctx.fillText('Dalgalanma (dB) · kesikli çizgi: eşik', L, top2 - 12);
+  ctx.textAlign = 'right';
+  ctx.fillText(hi, L - 8, T + 6); ctx.fillText(lo, L - 8, T + h1 - 6);
+  ctx.fillText(num(top), L - 8, top2 + 6); ctx.fillText('0', L - 8, top2 + h2 - 6);
+  ctx.fillText('şimdi', W - R, H - 12);
+  ctx.textAlign = 'left';
+  ctx.fillText('60 sn önce', L, H - 12);
+}
+
+// ---- plan düzenleyici ------------------------------------------------------
+function buildPlan(){
+  const box = $('rects');
+  box.textContent = '';
+  draft.forEach((r, i) => {
+    const row = el('div', 'rect-row');
+    const name = el('input');
+    name.value = r.name; name.maxLength = 30;
+    name.oninput = () => { r.name = name.value; markDirty(); };
+    row.append(name);
+    for (const f of ['x', 'y', 'w', 'h']) {
+      const inp = el('input');
+      inp.type = 'number'; inp.step = '0.1'; inp.value = r[f]; inp.dataset.f = f;
+      inp.oninput = () => { const v = parseFloat(inp.value); if (isFinite(v)) { r[f] = v; markDirty(); } };
+      row.append(inp);
+    }
+    const del = el('button', null, '×');
+    del.title = 'Alanı sil';
+    del.onclick = () => { if (draft.length > 1) { draft.splice(i, 1); markDirty(); buildPlan(); } else toast('En az bir alan olmalı.'); };
+    row.append(del);
+    box.append(row);
+  });
+  planInfo();
+}
+function planInfo(){
+  const a = draft.reduce((s, r) => s + (r.w > 0 && r.h > 0 ? r.w * r.h : 0), 0);
+  $('area').textContent = 'Toplam ' + num(a) + ' m²';
+  $('dirty').hidden = !dirty;
+}
+function markDirty(){ dirty = true; planInfo(); }
+
+// ---- çizim -----------------------------------------------------------------
+const RAMP = [[43,26,94],[58,82,180],[32,150,170],[80,200,120],[250,225,80]];
+const SIG = Array.from({length: 64}, (_, n) => {
+  const f = n / 63 * (RAMP.length - 1), i = Math.min(RAMP.length - 2, Math.floor(f)), u = f - i;
+  return RAMP[i].map((a, j) => Math.round(a + (RAMP[i + 1][j] - a) * u));
+});
+const off = document.createElement('canvas'), octx = off.getContext('2d');
+
+// Renk ölçeği en az 8 dB'lik bir aralığı kapsar; yoksa birkaç dB'lik gürültü büyük bir fark gibi görünür.
+const heatLo = () => Math.min(heat.min, heat.max - 8);
+
+function makeView(rects, W, H){
+  let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity;
+  for (const r of rects) { x0 = Math.min(x0, r.x); y0 = Math.min(y0, r.y); x1 = Math.max(x1, r.x + r.w); y1 = Math.max(y1, r.y + r.h); }
+  if (!isFinite(x0) || x1 <= x0 || y1 <= y0) { x0 = 0; y0 = 0; x1 = 4; y1 = 4; }
+  const pad = 0.5;
+  x0 -= pad; y0 -= pad; x1 += pad; y1 += pad;
+  const s = Math.min(W / (x1 - x0), H / (y1 - y0));
+  const ox = (W - s * (x1 - x0)) / 2 - s * x0, oy = (H - s * (y1 - y0)) / 2 - s * y0;
+  return {s, x0, y0, x1, y1, toS: (x, y) => [ox + s * x, oy + s * y], toW: (px, py) => [(px - ox) / s, (py - oy) / s]};
+}
+
+function draw(now){
+  requestAnimationFrame(draw);
+  const dpr = devicePixelRatio || 1, W = cv.clientWidth, H = cv.clientHeight;
+  if (cv.width !== Math.round(W * dpr) || cv.height !== Math.round(H * dpr)) { cv.width = Math.round(W * dpr); cv.height = Math.round(H * dpr); }
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  ctx.clearRect(0, 0, W, H);
+  if (!S || !W || !H) return;
+  if (tab === 'hareket') { drawMotion(W, H); return; }
+  const planMode = tab === 'plan' && draft;
+  const rects = (planMode ? draft : S.rects).filter(r => r.w > 0 && r.h > 0);
+  const v = drag ? drag.view : makeView(rects, W, H);
+  V = v;
+
+  // metre ızgarası
+  ctx.strokeStyle = css.grid; ctx.lineWidth = 1; ctx.beginPath();
+  for (let x = Math.ceil(v.x0); x <= v.x1; x++) { const [a, b] = v.toS(x, v.y0), [, d] = v.toS(x, v.y1); ctx.moveTo(a, b); ctx.lineTo(a, d); }
+  for (let y = Math.ceil(v.y0); y <= v.y1; y++) { const [a, b] = v.toS(v.x0, y), [c2] = v.toS(v.x1, y); ctx.moveTo(a, b); ctx.lineTo(c2, b); }
+  ctx.stroke();
+
+  ctx.fillStyle = css.room;
+  for (const r of rects) { const [a, b] = v.toS(r.x, r.y); ctx.fillRect(a, b, r.w * v.s, r.h * v.s); }
+
+  // ısı katmanı: konum olasılığı ya da seçili ağın sinyal haritası
+  if (!planMode) {
+    const g = S.grid;
+    let vals = null, mode = null;
+    if (layer === 'post' && S.est && !S.collecting) { vals = S.est.post; mode = 'post'; }
+    else if (layer.startsWith('k:') && heat) { vals = heat.vals; mode = 'sig'; }
+    if (vals && vals.length === g.nx * g.ny) {
+      ctx.save();
+      ctx.beginPath();
+      for (const r of rects) { const [a, b] = v.toS(r.x, r.y); ctx.rect(a, b, r.w * v.s, r.h * v.s); }
+      ctx.clip();
+      // Izgarayı hücre başına 1 piksel olarak boya, sonra büyüt: hücreler arasında çizgi kalmaz.
+      if (off.width !== g.nx || off.height !== g.ny) { off.width = g.nx; off.height = g.ny; }
+      const img = octx.createImageData(g.nx, g.ny), px = img.data;
+      const lo = mode === 'sig' ? heatLo() : 0, span = mode === 'sig' ? heat.max - lo : 1;
+      for (let i = 0; i < vals.length; i++) {
+        const val = vals[i];
+        if (val === null || (mode === 'post' && val < 0)) continue;
+        let c, a;
+        if (mode === 'post') { c = [245, 158, 11]; a = Math.pow(val / 100, 0.7) * 0.8; }
+        else { c = SIG[Math.round(Math.min(1, Math.max(0, (val - lo) / span)) * 63)]; a = 0.9; }
+        px[i * 4] = c[0]; px[i * 4 + 1] = c[1]; px[i * 4 + 2] = c[2]; px[i * 4 + 3] = Math.round(a * 255);
+      }
+      octx.putImageData(img, 0, 0);
+      const [hx, hy] = v.toS(g.x0, g.y0);
+      ctx.imageSmoothingEnabled = mode === 'post';
+      ctx.drawImage(off, hx, hy, g.nx * g.cell * v.s, g.ny * g.cell * v.s);
+      ctx.restore();
+    }
+  }
+
+  // duvarlar ve adlar
+  ctx.strokeStyle = css.wall; ctx.lineWidth = 2.5; ctx.lineJoin = 'round';
+  ctx.font = '600 12px -apple-system, BlinkMacSystemFont, sans-serif'; ctx.textBaseline = 'top';
+  for (const r of rects) {
+    const [a, b] = v.toS(r.x, r.y);
+    ctx.strokeRect(a, b, r.w * v.s, r.h * v.s);
+    const label = r.name + '  ' + num(r.w * r.h) + ' m²';
+    const tw = ctx.measureText(label).width;
+    if (tw + 16 < r.w * v.s) {
+      ctx.fillStyle = css.room; ctx.globalAlpha = 0.75; ctx.fillRect(a + 6, b + 6, tw + 8, 18); ctx.globalAlpha = 1;
+      ctx.fillStyle = css.text; ctx.fillText(label, a + 10, b + 9);
+    }
+  }
+  if (planMode) return;
+
+  // ölçüm noktaları
+  const c = S.collecting;
+  for (const p of S.points) {
+    if (c && c.id === p.id) continue;
+    const [a, b] = v.toS(p.x, p.y);
+    if (p.id === sel) { ctx.beginPath(); ctx.arc(a, b, 11, 0, 7); ctx.strokeStyle = css.accent; ctx.lineWidth = 2; ctx.stroke(); }
+    ctx.beginPath(); ctx.arc(a, b, 4.5, 0, 7);
+    ctx.fillStyle = css.point; ctx.fill();
+    ctx.lineWidth = 1.5; ctx.strokeStyle = css.ring; ctx.stroke();
+  }
+  if (c) {
+    const [a, b] = v.toS(c.x, c.y), ph = (now % 1400) / 1400;
+    ctx.beginPath(); ctx.arc(a, b, 8 + ph * 22, 0, 7);
+    ctx.strokeStyle = css.accent; ctx.globalAlpha = 1 - ph; ctx.lineWidth = 2; ctx.stroke(); ctx.globalAlpha = 1;
+    ctx.beginPath(); ctx.arc(a, b, 7, 0, 7); ctx.fillStyle = css.accent; ctx.fill();
+    return;
+  }
+
+  // tahmini konum
+  if (S.est) {
+    if (!dot) dot = {x: S.est.x, y: S.est.y};
+    dot.x += (S.est.x - dot.x) * 0.08; dot.y += (S.est.y - dot.y) * 0.08;
+    const [a, b] = v.toS(dot.x, dot.y), rad = Math.max(12, S.est.spread * v.s);
+    ctx.beginPath(); ctx.arc(a, b, rad, 0, 7);
+    ctx.fillStyle = css.accent; ctx.globalAlpha = 0.12; ctx.fill();
+    ctx.globalAlpha = 0.55; ctx.lineWidth = 1.5; ctx.strokeStyle = css.accent; ctx.stroke(); ctx.globalAlpha = 1;
+    ctx.beginPath(); ctx.arc(a, b, 8, 0, 7); ctx.fillStyle = '#fff'; ctx.fill();
+    ctx.beginPath(); ctx.arc(a, b, 5.5, 0, 7); ctx.fillStyle = css.accent; ctx.fill();
+  } else dot = null;
+}
+
+// ---- etkileşim -------------------------------------------------------------
+function evtPos(e){ const r = cv.getBoundingClientRect(); return [e.clientX - r.left, e.clientY - r.top]; }
+const inRect = (r, x, y) => x >= r.x && x <= r.x + r.w && y >= r.y && y <= r.y + r.h;
+
+cv.addEventListener('pointerdown', e => {
+  if (!S || !V) return;
+  const [px, py] = evtPos(e), [wx, wy] = V.toW(px, py);
+  if (tab === 'plan' && draft) {
+    for (let i = draft.length - 1; i >= 0; i--) {
+      if (inRect(draft[i], wx, wy)) { drag = {i, dx: wx - draft[i].x, dy: wy - draft[i].y, view: V}; cv.setPointerCapture(e.pointerId); break; }
+    }
+    return;
+  }
+  if (tab !== 'olcum') return;
+  if (S.collecting) { toast('Ölçüm sürüyor, bitmesini bekle.'); return; }
+  let best = null, bd = 16;
+  for (const p of S.points) { const [a, b] = V.toS(p.x, p.y), d = Math.hypot(a - px, b - py); if (d < bd) { bd = d; best = p; } }
+  if (best) { sel = best.id; renderSide(); return; }
+  sel = null;
+  if (!S.rects.some(r => inRect(r, wx, wy))) { toast('Planın içinde bir yere tıkla.'); renderSide(); return; }
+  post('/api/calibrate', {x: wx, y: wy, n: nScans});
+});
+cv.addEventListener('pointermove', e => {
+  if (!drag) return;
+  const [px, py] = evtPos(e), [wx, wy] = drag.view.toW(px, py), r = draft[drag.i];
+  r.x = Math.round((wx - drag.dx) * 10) / 10; r.y = Math.round((wy - drag.dy) * 10) / 10;
+  const row = $('rects').children[drag.i];
+  row.querySelector('[data-f=x]').value = r.x; row.querySelector('[data-f=y]').value = r.y;
+  markDirty();
+});
+const endDrag = () => { drag = null; };
+cv.addEventListener('pointerup', endDrag);
+cv.addEventListener('pointercancel', endDrag);
+
+for (const b of document.querySelectorAll('.tab')) b.onclick = () => { if (S) setTab(b.dataset.tab); };
+$('layer').onchange = e => { layer = e.target.value; layerAuto = false; syncHeat().then(renderSide); };
+for (const b of $('seg').children) b.onclick = () => { nScans = +b.dataset.n; renderSide(); };
+$('learn').onclick = () => post('/api/motion/learn');
+for (const b of $('sens').children) b.onclick = () => post('/api/motion/sens', {sens: +b.dataset.s});
+$('remeasure').onclick = () => { if (sel !== null) post('/api/calibrate', {id: sel, n: nScans}); };
+$('delpoint').onclick = async () => { if (sel !== null && await post('/api/delete', {id: sel})) sel = null; };
+$('cancel').onclick = () => post('/api/cancel');
+let clearArmed = null;
+$('clear').onclick = () => {
+  const b = $('clear');
+  const reset = () => { clearTimeout(clearArmed); clearArmed = null; b.textContent = 'Tüm ölçümleri sil'; };
+  if (clearArmed) { reset(); post('/api/clear'); return; }
+  b.textContent = 'Emin misin? Silmek için tekrar tıkla';
+  clearArmed = setTimeout(reset, 4000);
+};
+$('addrect').onclick = () => { draft.push({name: 'Alan ' + (draft.length + 1), x: 0, y: 0, w: 1.5, h: 1.5}); markDirty(); buildPlan(); };
+$('saveplan').onclick = async () => {
+  if (await post('/api/plan', {rects: draft})) { draft = JSON.parse(JSON.stringify(S.rects)); dirty = false; buildPlan(); toast('Plan kaydedildi.'); }
+};
+
+requestAnimationFrame(draw);
+loop();
+motionLoop();
+</script>
+</body>
+</html>

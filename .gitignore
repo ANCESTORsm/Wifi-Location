@@ -1,0 +1,6 @@
+__pycache__/
+*.pyc
+# Kişisel ölçümler: komşu ağ adlarını ve ev planını içerir
+data.json
+data.json.tmp
+.DS_Store
